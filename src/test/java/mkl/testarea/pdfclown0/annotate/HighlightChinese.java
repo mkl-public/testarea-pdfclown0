@@ -15,6 +15,7 @@ import org.junit.Test;
 import org.pdfclown.documents.Page;
 import org.pdfclown.documents.contents.ITextString;
 import org.pdfclown.documents.contents.TextChar;
+import org.pdfclown.documents.contents.colorSpaces.DeviceRGBColor;
 import org.pdfclown.documents.contents.fonts.CompositeFont;
 import org.pdfclown.documents.contents.objects.ShowText;
 import org.pdfclown.documents.contents.objects.ShowTextToNextLine;
@@ -50,6 +51,13 @@ public class HighlightChinese {
      * {@link ShowText} class. A special treatment of {@link ShowTextToNextLine}
      * instances at the end of its <code>scan</code> method results in errors
      * calculating the text line matrix and as a result later text matrices.
+     * </p>
+     * <hr/>
+     * <a href="https://stackoverflow.com/questions/48801062/how-to-highlight-the-color-for-non-english-search-keyword-as-orange-in-pdfclown">
+     * How to highlight the color for non english search keyword as orange in pdfclown
+     * </a>
+     * <p>
+     * This test now explicitly selects a color for the highlight.
      * </p>
      */
     @Test
@@ -112,7 +120,7 @@ public class HighlightChinese {
                                     highlightQuads.add(Quad.get(textBox));
                                 }
                                 // Highlight the text pattern match!
-                                new TextMarkup(page, highlightQuads, null, MarkupTypeEnum.Highlight);
+                                new TextMarkup(page, highlightQuads, null, MarkupTypeEnum.Highlight).withColor(new DeviceRGBColor(1, .5, .2));
                             }
 
                             @Override
