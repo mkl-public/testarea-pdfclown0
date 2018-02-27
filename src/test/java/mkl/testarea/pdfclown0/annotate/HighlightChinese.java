@@ -15,6 +15,7 @@ import org.junit.Test;
 import org.pdfclown.documents.Page;
 import org.pdfclown.documents.contents.ITextString;
 import org.pdfclown.documents.contents.TextChar;
+import org.pdfclown.documents.contents.fonts.CompositeFont;
 import org.pdfclown.documents.contents.objects.ShowText;
 import org.pdfclown.documents.contents.objects.ShowTextToNextLine;
 import org.pdfclown.documents.interaction.annotations.TextMarkup;
@@ -122,6 +123,94 @@ public class HighlightChinese {
                         );
             }
             file.save(new File(RESULT_FOLDER, "chinese1-Highlighted.pdf"), SerializationModeEnum.Incremental);
+        }
+    }
+
+    /**
+     * <a href="https://stackoverflow.com/questions/48981631/using-pdfclown-few-search-keywords-are-not-highlighting-in-chinese-japanese-docu">
+     * Using pdfclown few search keywords are not highlighting in chinese/japanese documents
+     * </a>
+     * <br/>
+     * <a href="https://drive.google.com/file/d/1i4MApZA8HrxlU7n6Hjb9u5HsU1vaEOJw/view">
+     * test123.pdf
+     * </a>
+     * <p>
+     * The issue observed is due to an error in the PDF Clown {@link CompositeFont}
+     * class. Its <code>onLoad</code> method expects the default width in the wrong
+     * dictionary.
+     * </p>
+     */
+    @Test
+    public void testHighLightTest123() throws IOException {
+        try (   InputStream resource = getClass().getResourceAsStream("test123.pdf")   ) {
+            // Enter FilePath, Page Number, StartsWith, EndsWith
+            @SuppressWarnings("resource")
+            org.pdfclown.files.File file = new org.pdfclown.files.File(resource);    
+            // Define the text pattern to look for!
+            String textRegEx = "亿元或";
+
+            Pattern pattern = Pattern.compile(textRegEx, Pattern.CASE_INSENSITIVE);
+            TextExtractor textExtractor = new TextExtractor();
+            for(final Page page : file.getDocument().getPages())
+            {
+                // Extract the page text!
+                Map<Rectangle2D,List<ITextString>> textStrings = textExtractor.extract(page);
+
+                // Find the text pattern matches!
+                final Matcher matcher = pattern.matcher(TextExtractor.toString(textStrings));
+                textExtractor.filter(
+                        textStrings,
+                        new TextExtractor.IIntervalFilter() {
+                            @Override
+                            public boolean hasNext() {
+                                return matcher.find();
+                            }
+
+                            @Override
+                            public Interval<Integer> next() {
+                                return new Interval<>(matcher.start(), matcher.end());
+                            }
+
+                            @Override
+                            public void process(Interval<Integer> interval, ITextString match) {
+                                // Defining the highlight box of the text pattern match...
+                                List<Quad> highlightQuads = new ArrayList<>();
+                                {
+                                    /*
+                                    NOTE: A text pattern match may be split across multiple contiguous lines,
+                                    so we have to define a distinct highlight box for each text chunk.
+                                     */
+
+                                    Rectangle2D textBox = null;
+
+                                    for(TextChar textChar : match.getTextChars())
+                                    {
+                                        Rectangle2D textCharBox = textChar.getBox();
+                                        if(textBox == null) {
+                                            textBox = (Rectangle2D)textCharBox.clone();
+                                        } else {
+                                            if(textCharBox.getY() > textBox.getMaxY()) {
+                                                highlightQuads.add(Quad.get(textBox));
+                                                textBox = (Rectangle2D)textCharBox.clone();
+                                            } else {
+                                                textBox.add(textCharBox);
+                                            }
+                                        }
+                                    }
+                                    highlightQuads.add(Quad.get(textBox));
+                                }
+                                // Highlight the text pattern match!
+                                new TextMarkup(page, highlightQuads, null, MarkupTypeEnum.Highlight);
+                            }
+
+                            @Override
+                            public void remove() {
+                                throw new UnsupportedOperationException();
+                            }
+                        }
+                        );
+            }
+            file.save(new File(RESULT_FOLDER, "test123-Highlighted.pdf"), SerializationModeEnum.Incremental);
         }
     }
 }
