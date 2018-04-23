@@ -264,7 +264,7 @@ public class ComplexHighlight {
                 Interval<Integer> intervalJ = matches.get(j).interval;
                 if (intervalI.getLow() < intervalJ.getHigh() && intervalJ.getLow() < intervalI.getHigh()) {
                     System.out.printf("Match %d removed as it overlaps match %d.\n", j, i);
-                    matches.remove(j);
+                    matches.remove(j--);
                 }
             }
         }
