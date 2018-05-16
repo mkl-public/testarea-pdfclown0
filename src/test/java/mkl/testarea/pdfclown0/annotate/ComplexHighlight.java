@@ -373,6 +373,126 @@ public class ComplexHighlight {
     }
 
     /**
+     * <a href="https://stackoverflow.com/questions/50129154/pdfclown-few-different-fonts-of-pdf-files-are-not-recognizing-and-also-i-am-gett">
+     * Pdfclown-Few different fonts of pdf files are not recognizing and also i am getting exceptions
+     * </a>
+     * <br/>
+     * <a href="https://drive.google.com/file/d/17Rwdn9j4XciQDeQ23_4jSgy5xjG6R__S/view">
+     * UnicodeTest.pdf
+     * </a>
+     * <p>
+     * Indeed, the {@link NullPointerException} in {@link CompositeFont} encoding loading
+     * can be reproduced. The cause are missing encoding CMaps for CJK languages. After
+     * adding the CMaps UniCNS-UTF16-H, UniGB-UTF16-H, UniJIS-UTF16-H, and UniKS-UTF16-H
+     * to the PDF Clown project folder main\res\pkg\fonts\cmap\ and rebuilding it, the
+     * error does not occur anymore.
+     * </p>
+     * <p>
+     * This test uses the code from {@link #testMarkLikeSeshadriImproved()}.
+     * </p>
+     */
+    @Test
+    public void testMarkLikeSeshadriImprovedUnicodeTest() throws IOException {
+        List<Keyword> l = new ArrayList<>();
+        Keyword k1 = new Keyword();
+        k1.setKey("Just. ETS");
+        k1.setValue("NET");
+        l.add(k1);
+        Keyword k2 = new Keyword();
+        k2.setKey("Test. ETS");
+        k2.setValue("PROFIT");
+        l.add(k2);
+        Keyword k = new Keyword();
+        k.setKey("ETS");
+        k.setValue("LOSS");
+        l.add(k);
+
+        System.out.println("\nUnicodeTest.pdf like Seshadri improved");
+
+        try (InputStream resource = getClass().getResourceAsStream("UnicodeTest.pdf")) {
+            @SuppressWarnings("resource")
+            org.pdfclown.files.File file = new org.pdfclown.files.File(resource);
+
+            long startTime = System.currentTimeMillis();
+
+            TextExtractor textExtractor = new TextExtractor(true, true);
+            for (final Page page : file.getDocument().getPages()) {
+                Map<Rectangle2D, List<ITextString>> textStrings = textExtractor.extract(page);
+
+                List<Match> matches = new ArrayList<>();
+
+                for (Keyword e : l) {
+                    final String searchKey = e.getKey();
+                    final String translationKeyword = e.getValue();
+
+                    final Pattern pattern;
+                    if ((searchKey.contains(")") && searchKey.contains("("))
+                            || (searchKey.contains("(") && !searchKey.contains(")"))
+                            || (searchKey.contains(")") && !searchKey.contains("(")) || searchKey.contains("?")
+                            || searchKey.contains("*") || searchKey.contains("+")) {
+                        pattern = Pattern.compile(Pattern.quote(searchKey), Pattern.CASE_INSENSITIVE);
+                    } else
+                        pattern = Pattern.compile("\\b" + searchKey + "\\b", Pattern.CASE_INSENSITIVE);
+
+                    final Matcher matcher = pattern.matcher(TextExtractor.toString(textStrings).toLowerCase());
+
+                    textExtractor.filter(textStrings, new TextExtractor.IIntervalFilter() {
+                        public boolean hasNext() {
+                            return matcher.find();
+                        }
+
+                        public Interval<Integer> next() {
+                            return new Interval<Integer>(matcher.start(), matcher.end(), true, false);
+                        }
+
+                        public void process(Interval<Integer> interval, ITextString match) {
+                            matches.add(new Match(interval, match, translationKeyword));
+                        }
+
+                        public void remove() {
+                            throw new UnsupportedOperationException();
+                        }
+                    });
+                }
+
+                removeOverlaps(matches);
+
+                for (Match match : matches) {
+                    List<Quad> highlightQuads = new ArrayList<Quad>();
+                    {
+                        Rectangle2D textBox = null;
+                        for (TextChar textChar : match.match.getTextChars()) {
+                            Rectangle2D textCharBox = textChar.getBox();
+                            if (textBox == null) {
+                                textBox = (Rectangle2D) textCharBox.clone();
+                            } else {
+                                if (textCharBox.getY() > textBox.getMaxY()) {
+                                    highlightQuads.add(Quad.get(textBox));
+                                    textBox = (Rectangle2D) textCharBox.clone();
+                                } else {
+                                    textBox.add(textCharBox);
+                                }
+                            }
+
+                            textBox.setRect(textBox.getX(), textBox.getY(), textBox.getWidth(),
+                                    textBox.getHeight());
+                            highlightQuads.add(Quad.get(textBox));
+                        }
+
+                        new TextMarkup(page, highlightQuads, match.tag, MarkupTypeEnum.Highlight);
+                    }
+                }
+            }
+
+            SerializationModeEnum serializationMode = SerializationModeEnum.Standard;
+            file.save(new File(RESULT_FOLDER, "UnicodeTest-highlight-improved.pdf"), serializationMode);
+
+            long endTime = System.currentTimeMillis();
+            System.out.println("seconds take for execution is:" + (endTime - startTime) / 1000);
+        }
+    }
+
+    /**
      * This method removes overlapping matches from the given list.
      * Beware, the result can differ depending on the chosen sort order.
      * 
