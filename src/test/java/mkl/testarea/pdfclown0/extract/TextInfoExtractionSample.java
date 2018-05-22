@@ -1,7 +1,9 @@
 package mkl.testarea.pdfclown0.extract;
 
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
+import java.io.InputStream;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -14,6 +16,7 @@ import org.pdfclown.documents.contents.colorSpaces.DeviceRGBColor;
 import org.pdfclown.documents.contents.composition.PrimitiveComposer;
 import org.pdfclown.documents.contents.objects.ContainerObject;
 import org.pdfclown.documents.contents.objects.ContentObject;
+import org.pdfclown.documents.contents.objects.DrawRectangle;
 import org.pdfclown.documents.contents.objects.Text;
 import org.pdfclown.documents.contents.objects.XObject;
 import org.pdfclown.files.File;
@@ -77,6 +80,44 @@ public class TextInfoExtractionSample
         file.close();
     }
 
+    /**
+     * <a href="https://stackoverflow.com/questions/50398731/text-info-extraction-from-pdf">
+     * Text info extraction from pdf
+     * </a>
+     * <br/>
+     * <a href="https://nofile.io/f/Kvf2DkXvfj4/edit9.pdf">
+     * edit9.pdf
+     * </a>
+     * <p>
+     * Indeed, PDF Clown as is does not sensibly handle non-upright text.
+     * Several changes in the lib were necessary for a work-around.
+     * </p>
+     */
+    @Test
+    public void testEdit9() throws IOException
+    {
+        try (   InputStream resource = getClass().getResourceAsStream("edit9.pdf")  ) {
+            File file = new File(resource);
+            Document document = file.getDocument();
+            PageStamper stamper = new PageStamper();
+
+            for (Page page : document.getPages())
+            {
+                System.out.println("\nScanning page " + page.getNumber() + "...\n");
+
+                stamper.setPage(page);
+
+                extract(new ContentScanner(page), stamper.getForeground());
+
+                stamper.flush();
+            }
+
+            // 3. Decorated version serialization.
+            file.save(new java.io.File(RESULT_FOLDER, "edit9-decorated.pdf"), SerializationModeEnum.Standard);
+            file.close();
+        }
+    }
+
     private final DeviceRGBColor[] textCharBoxColors = new DeviceRGBColor[] { new DeviceRGBColor(200 / 255d, 100 / 255d, 100 / 255d),
             new DeviceRGBColor(100 / 255d, 200 / 255d, 100 / 255d), new DeviceRGBColor(100 / 255d, 100 / 255d, 200 / 255d) };
     private final DeviceRGBColor textStringBoxColor = DeviceRGBColor.Black;
@@ -112,20 +153,27 @@ public class TextInfoExtractionSample
                     composer.setStrokeColor(textCharBoxColors[colorIndex]);
                     for (TextChar textChar : textString.getTextChars())
                     {
-                        /*
-                         * NOTE: You can get further text information (font,
-                         * font size, text color, text rendering mode) through
-                         * textChar.style.
-                         */
-                        composer.drawRectangle(textChar.getBox());
+                        Rectangle2D box = textChar.getBox();
+                        composer.beginLocalState();
+                        AffineTransform rot = AffineTransform.getRotateInstance(textChar.getAlpha());
+                        composer.applyMatrix(rot.getScaleX(), rot.getShearY(), rot.getShearX(), rot.getScaleY(),
+                                box.getX(), composer.getScanner().getContextSize().getHeight() - box.getY());
+                        composer.add(new DrawRectangle(0, - box.getHeight(), box.getWidth(), box.getHeight()));
+
                         composer.stroke();
+                        composer.end();
                     }
 
                     // Drawing text string bounding box...
                     composer.beginLocalState();
                     composer.setLineDash(new LineDash(new double[] { 5 }));
                     composer.setStrokeColor(textStringBoxColor);
-                    composer.drawRectangle(textString.getBox());
+
+                    AffineTransform rot = AffineTransform.getRotateInstance(textString.getAlpha());
+                    composer.applyMatrix(rot.getScaleX(), rot.getShearY(), rot.getShearX(), rot.getScaleY(),
+                            textStringBox.getX(), composer.getScanner().getContextSize().getHeight() - textStringBox.getY());
+                    composer.add(new DrawRectangle(0, - textStringBox.getHeight(), textStringBox.getWidth(), textStringBox.getHeight()));
+
                     composer.stroke();
                     composer.end();
                 }
